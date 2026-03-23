@@ -9,3 +9,63 @@ Wraps httpx.AsyncClient with:
 Both authenticated and unauthenticated requests go through this base client.
 The auth module is injected as a dependency and is None in public mode.
 """
+
+from types import TracebackType
+
+import httpx
+import structlog
+
+from mexc_mcp.errors import AuthError, MEXCAPIError, RateLimitError
+
+logger = structlog.get_logger()
+
+SPOT_BASE_URL = "https://api.mexc.com"
+
+
+class MexcClient:
+    """Async HTTP client for unauthenticated MEXC REST API calls."""
+
+    def __init__(
+        self,
+        base_url: str = SPOT_BASE_URL,
+        timeout: float = 10.0,
+    ) -> None:
+        self._http = httpx.AsyncClient(base_url=base_url, timeout=timeout)
+
+    async def get(self, path: str, params: dict[str, str] | None = None) -> dict:  # type: ignore[type-arg]
+        """Perform an unauthenticated GET request and return the parsed JSON body."""
+        log = logger.bind(path=path)
+        response = await self._http.get(path, params=params)
+        log.debug("mexc response", status=response.status_code)
+
+        if response.status_code == 429:
+            raise RateLimitError(429, None, "rate limit exceeded")
+        if response.status_code in (401, 403):
+            data = _safe_json(response)
+            raise AuthError(response.status_code, data.get("code"), data.get("msg", "auth error"))
+        if not response.is_success:
+            data = _safe_json(response)
+            raise MEXCAPIError(response.status_code, data.get("code"), data.get("msg", "unknown error"))
+
+        return response.json()  # type: ignore[no-any-return]
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    async def __aenter__(self) -> "MexcClient":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        await self.aclose()
+
+
+def _safe_json(response: httpx.Response) -> dict:  # type: ignore[type-arg]
+    try:
+        return response.json()  # type: ignore[no-any-return]
+    except Exception:
+        return {}

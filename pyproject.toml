@@ -27,6 +27,9 @@ mexc-mcp = "mexc_mcp.server:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: hits the live MEXC API (deselect with '-m not integration')",
+]
 
 [tool.ruff]
 line-length = 100

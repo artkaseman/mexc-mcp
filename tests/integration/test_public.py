@@ -1,11 +1,18 @@
 """Integration tests for public market data tools.
 
-Hits the live MEXC API — no API keys required. Mark with pytest.mark.public_only
-so these can be run independently of authenticated tests.
-
-Tests:
-- get_ticker returns valid 24h stats for BTCUSDT
-- get_orderbook returns non-empty bids and asks
-- get_klines returns OHLCV data for a valid symbol/interval
-- get_exchange_info lists at least one trading symbol
+Hits the live MEXC API — no API keys required.
+Run with: make test-public
+Skip in CI with: pytest -m "not integration"
 """
+
+import pytest
+
+from mexc_mcp.tools.market import ping_mexc
+
+pytestmark = pytest.mark.integration
+
+
+async def test_ping_mexc_live():
+    """GET /api/v3/ping succeeds against the real MEXC endpoint."""
+    result = await ping_mexc()
+    assert result == "MEXC API is reachable."
