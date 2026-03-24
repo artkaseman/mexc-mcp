@@ -14,9 +14,9 @@ Exported groups:
 from collections.abc import Callable
 from typing import Any
 
-from mexc_mcp.tools.market import get_ticker, ping_mexc
+from mexc_mcp.tools.market import get_exchange_info, get_klines, get_orderbook, get_ticker, ping_mexc
 
-PUBLIC_TOOLS: list[Callable[..., Any]] = [ping_mexc, get_ticker]
+PUBLIC_TOOLS: list[Callable[..., Any]] = [ping_mexc, get_ticker, get_orderbook, get_klines, get_exchange_info]
 AUTHENTICATED_TOOLS: list[Callable[..., Any]] = []
 TRADING_TOOLS: list[Callable[..., Any]] = []
 WALLET_TOOLS: list[Callable[..., Any]] = []
