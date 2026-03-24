@@ -4,7 +4,9 @@ Uses respx to intercept httpx requests — no real network calls.
 """
 
 import httpx
+import pytest
 
+from mexc_mcp.tools.account import get_balances
 from mexc_mcp.tools.market import get_exchange_info, get_klines, get_orderbook, get_ticker, ping_mexc
 
 
@@ -240,3 +242,116 @@ async def test_get_exchange_info_error(mexc_mock):
     result = await get_exchange_info("FAKE")
 
     assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# get_balances
+# ---------------------------------------------------------------------------
+
+_ACCOUNT_RAW = {
+    "makerCommission": 0,
+    "takerCommission": 5,
+    "buyerCommission": 0,
+    "sellerCommission": 0,
+    "canTrade": True,
+    "canWithdraw": False,
+    "canDeposit": False,
+    "updateTime": None,
+    "accountType": "SPOT",
+    "balances": [
+        {"asset": "BTC", "free": "0.5", "locked": "0.1"},
+        {"asset": "USDT", "free": "1000.00", "locked": "0.00"},
+        {"asset": "ETH", "free": "0.0", "locked": "0.0"},  # zero — should be filtered
+    ],
+    "permissions": ["SPOT"],
+}
+
+
+@pytest.fixture
+def auth_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inject fake API credentials into the environment for tool tests."""
+    monkeypatch.setenv("MEXC_API_KEY", "test_api_key_1234")
+    monkeypatch.setenv("MEXC_SECRET_KEY", "test_secret_key_5678")
+
+
+async def test_get_balances_success(mexc_mock, auth_env):
+    mexc_mock.get("/api/v3/account").mock(
+        return_value=httpx.Response(200, json=_ACCOUNT_RAW)
+    )
+
+    result = await get_balances()
+
+    assert result["account_type"] == "SPOT"
+    assert result["can_trade"] is True
+    assert len(result["balances"]) == 2  # ETH with zero balance filtered out
+
+
+async def test_get_balances_filters_zero_balances(mexc_mock, auth_env):
+    mexc_mock.get("/api/v3/account").mock(
+        return_value=httpx.Response(200, json=_ACCOUNT_RAW)
+    )
+
+    result = await get_balances()
+
+    assets = {b["asset"] for b in result["balances"]}
+    assert "BTC" in assets
+    assert "USDT" in assets
+    assert "ETH" not in assets  # zero free + zero locked
+
+
+async def test_get_balances_decimal_fields_are_strings(mexc_mock, auth_env):
+    mexc_mock.get("/api/v3/account").mock(
+        return_value=httpx.Response(200, json=_ACCOUNT_RAW)
+    )
+
+    result = await get_balances()
+
+    btc = next(b for b in result["balances"] if b["asset"] == "BTC")
+    assert btc["free"] == "0.5"
+    assert btc["locked"] == "0.1"
+    assert isinstance(btc["free"], str)
+    assert isinstance(btc["locked"], str)
+
+
+async def test_get_balances_sends_api_key_header(mexc_mock, auth_env):
+    route = mexc_mock.get("/api/v3/account").mock(
+        return_value=httpx.Response(200, json=_ACCOUNT_RAW)
+    )
+
+    await get_balances()
+
+    assert route.called
+    assert route.calls[0].request.headers.get("x-mexc-apikey") == "test_api_key_1234"
+
+
+async def test_get_balances_sends_signature_param(mexc_mock, auth_env):
+    route = mexc_mock.get("/api/v3/account").mock(
+        return_value=httpx.Response(200, json=_ACCOUNT_RAW)
+    )
+
+    await get_balances()
+
+    url = str(route.calls[0].request.url)
+    assert "signature=" in url
+    assert "timestamp=" in url
+
+
+async def test_get_balances_auth_error(mexc_mock, auth_env):
+    mexc_mock.get("/api/v3/account").mock(
+        return_value=httpx.Response(401, json={"code": -2014, "msg": "API-key format invalid."})
+    )
+
+    result = await get_balances()
+
+    assert "error" in result
+
+
+async def test_get_balances_missing_credentials(monkeypatch: pytest.MonkeyPatch):
+    """Empty API key raises ValueError caught by the tool — returns error dict."""
+    monkeypatch.setenv("MEXC_API_KEY", "")
+    monkeypatch.setenv("MEXC_SECRET_KEY", "")
+
+    result = await get_balances()
+
+    assert "error" in result
+    assert "authentication" in result["error"].lower()

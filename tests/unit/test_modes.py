@@ -65,3 +65,30 @@ async def test_get_orderbook_schema_has_limit_param():
 async def test_invalid_mode_string_raises():
     with pytest.raises(ValueError):
         ServerMode("invalid_mode")
+
+
+async def test_get_balances_not_in_public_mode():
+    """get_balances must be absent from public mode — it is never registered."""
+    mcp = build_server(ServerMode.PUBLIC)
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+    assert "get_balances" not in {t.name for t in tools}
+
+
+async def test_get_balances_in_local_mode():
+    """get_balances must be discoverable in local mode."""
+    mcp = build_server(ServerMode.LOCAL)
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+    assert "get_balances" in {t.name for t in tools}
+
+
+async def test_local_mode_tools_are_superset_of_public():
+    """Local mode must include every public tool plus at least one authenticated one."""
+    pub_mcp = build_server(ServerMode.PUBLIC)
+    loc_mcp = build_server(ServerMode.LOCAL)
+    async with Client(pub_mcp) as c:
+        pub_names = {t.name for t in await c.list_tools()}
+    async with Client(loc_mcp) as c:
+        loc_names = {t.name for t in await c.list_tools()}
+    assert pub_names < loc_names  # strict subset

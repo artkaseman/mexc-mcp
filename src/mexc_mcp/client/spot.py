@@ -49,3 +49,7 @@ class SpotClient:
     async def get_exchange_info(self, symbol: str) -> dict:  # type: ignore[type-arg]
         """GET /api/v3/exchangeInfo — trading rules for a symbol."""
         return await self._client.get("/api/v3/exchangeInfo", params={"symbol": symbol})
+
+    async def get_account(self) -> dict:  # type: ignore[type-arg]
+        """GET /api/v3/account — account info including spot balances. Requires auth."""
+        return await self._client.signed_get("/api/v3/account")
