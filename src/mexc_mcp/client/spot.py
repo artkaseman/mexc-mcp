@@ -53,3 +53,36 @@ class SpotClient:
     async def get_account(self) -> dict:  # type: ignore[type-arg]
         """GET /api/v3/account — account info including spot balances. Requires auth."""
         return await self._client.signed_get("/api/v3/account")
+
+    async def get_open_orders(self, symbol: str | None = None) -> list:  # type: ignore[type-arg]
+        """GET /api/v3/openOrders — all open orders, optionally filtered by symbol.
+
+        If symbol is None, returns open orders for all trading pairs.
+        """
+        params: dict[str, str] = {}
+        if symbol is not None:
+            params["symbol"] = symbol
+        return await self._client.signed_get(  # type: ignore[return-value]
+            "/api/v3/openOrders", params=params or None
+        )
+
+    async def get_my_trades(
+        self,
+        symbol: str,
+        limit: int = 500,
+        start_time: int | None = None,
+        end_time: int | None = None,
+    ) -> list:  # type: ignore[type-arg]
+        """GET /api/v3/myTrades — executed trade history for a symbol.
+
+        limit: max records to return (default 500, max 1000).
+        start_time / end_time: Unix timestamps in milliseconds (optional).
+        """
+        params: dict[str, str] = {"symbol": symbol, "limit": str(limit)}
+        if start_time is not None:
+            params["startTime"] = str(start_time)
+        if end_time is not None:
+            params["endTime"] = str(end_time)
+        return await self._client.signed_get(  # type: ignore[return-value]
+            "/api/v3/myTrades", params=params
+        )

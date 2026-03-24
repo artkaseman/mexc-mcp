@@ -13,6 +13,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
+from mexc_mcp.models.account import Order, TradeRecord
 from mexc_mcp.models.market import ExchangeInfo, Kline, OrderBook, Ticker
 
 
@@ -252,3 +253,90 @@ def test_symbol_info_ignores_unknown_fields(btcusdt_exchange_info_raw):
     # Should not raise
     info = ExchangeInfo.model_validate(raw)
     assert info.symbols[0].symbol == "BTCUSDT"
+
+
+# ---------------------------------------------------------------------------
+# Order
+# ---------------------------------------------------------------------------
+
+
+def test_order_parses_raw(btcusdt_open_orders_raw):
+    order = Order.model_validate(btcusdt_open_orders_raw[0])
+
+    assert order.symbol == "BTCUSDT"
+    assert order.order_id == "C02__474250929059741696"
+    assert order.price == Decimal("50000.00")
+    assert order.orig_qty == Decimal("0.001")
+    assert order.executed_qty == Decimal("0")
+    assert order.status == "NEW"
+    assert order.side == "BUY"
+    assert order.type == "LIMIT"
+    assert order.is_working is True
+
+
+def test_order_camel_aliases(btcusdt_open_orders_raw):
+    order = Order.model_validate(btcusdt_open_orders_raw[0])
+
+    assert order.time_in_force == "GTC"
+    assert order.cummulative_quote_qty == Decimal("0")
+    assert order.orig_quote_order_qty == Decimal("50.00")
+    assert order.time == 1714001234000
+    assert order.update_time == 1714001234000
+
+
+def test_order_decimal_fields_are_decimal(btcusdt_open_orders_raw):
+    order = Order.model_validate(btcusdt_open_orders_raw[0])
+
+    assert isinstance(order.price, Decimal)
+    assert isinstance(order.orig_qty, Decimal)
+    assert isinstance(order.stop_price, Decimal)
+
+
+def test_order_ignores_unknown_fields(btcusdt_open_orders_raw):
+    raw = dict(btcusdt_open_orders_raw[0])
+    raw["someNewField"] = "x"
+    order = Order.model_validate(raw)
+    assert order.symbol == "BTCUSDT"
+
+
+# ---------------------------------------------------------------------------
+# TradeRecord
+# ---------------------------------------------------------------------------
+
+
+def test_trade_record_parses_raw(btcusdt_trade_history_raw):
+    trade = TradeRecord.model_validate(btcusdt_trade_history_raw[0])
+
+    assert trade.symbol == "BTCUSDT"
+    assert trade.id == "C02__474250929059741697"
+    assert trade.order_id == "C02__474250929059741698"
+    assert trade.price == Decimal("70996.79")
+    assert trade.qty == Decimal("0.001")
+    assert trade.quote_qty == Decimal("70.99679")
+    assert trade.commission == Decimal("0.03549840")
+    assert trade.commission_asset == "USDT"
+    assert trade.is_buyer is True
+    assert trade.is_maker is False
+
+
+def test_trade_record_seller_maker(btcusdt_trade_history_raw):
+    trade = TradeRecord.model_validate(btcusdt_trade_history_raw[1])
+
+    assert trade.is_buyer is False
+    assert trade.is_maker is True
+    assert trade.commission_asset == "BTC"
+
+
+def test_trade_record_decimal_fields(btcusdt_trade_history_raw):
+    trade = TradeRecord.model_validate(btcusdt_trade_history_raw[0])
+
+    assert isinstance(trade.price, Decimal)
+    assert isinstance(trade.qty, Decimal)
+    assert isinstance(trade.commission, Decimal)
+
+
+def test_trade_record_ignores_unknown_fields(btcusdt_trade_history_raw):
+    raw = dict(btcusdt_trade_history_raw[0])
+    raw["isBestMatch"] = True  # present in fixture but not in model
+    trade = TradeRecord.model_validate(raw)
+    assert trade.symbol == "BTCUSDT"

@@ -83,6 +83,70 @@ def btcusdt_klines_raw() -> list:  # type: ignore[type-arg]
 
 
 @pytest.fixture
+def btcusdt_open_orders_raw() -> list:  # type: ignore[type-arg]
+    """Realistic response from GET /api/v3/openOrders?symbol=BTCUSDT."""
+    return [
+        {
+            "symbol": "BTCUSDT",
+            "orderId": "C02__474250929059741696",
+            "orderListId": -1,
+            "clientOrderId": None,
+            "price": "50000.00",
+            "origQty": "0.001",
+            "executedQty": "0.00000000",
+            "cummulativeQuoteQty": "0.00000000",
+            "status": "NEW",
+            "timeInForce": "GTC",
+            "type": "LIMIT",
+            "side": "BUY",
+            "stopPrice": "0.00000000",
+            "icebergQty": "0.00000000",
+            "time": 1714001234000,
+            "updateTime": 1714001234000,
+            "isWorking": True,
+            "origQuoteOrderQty": "50.00",
+        }
+    ]
+
+
+@pytest.fixture
+def btcusdt_trade_history_raw() -> list:  # type: ignore[type-arg]
+    """Realistic response from GET /api/v3/myTrades?symbol=BTCUSDT."""
+    return [
+        {
+            "symbol": "BTCUSDT",
+            "id": "C02__474250929059741697",
+            "orderId": "C02__474250929059741698",
+            "orderListId": -1,
+            "price": "70996.79",
+            "qty": "0.001",
+            "quoteQty": "70.99679",
+            "commission": "0.03549840",
+            "commissionAsset": "USDT",
+            "time": 1714001234000,
+            "isBuyer": True,
+            "isMaker": False,
+            "isBestMatch": True,
+        },
+        {
+            "symbol": "BTCUSDT",
+            "id": "C02__474250929059741699",
+            "orderId": "C02__474250929059741700",
+            "orderListId": -1,
+            "price": "71500.00",
+            "qty": "0.002",
+            "quoteQty": "143.00",
+            "commission": "0.00000200",
+            "commissionAsset": "BTC",
+            "time": 1714001290000,
+            "isBuyer": False,
+            "isMaker": True,
+            "isBestMatch": True,
+        },
+    ]
+
+
+@pytest.fixture
 def btcusdt_exchange_info_raw() -> dict:  # type: ignore[type-arg]
     """Real response payload from GET /api/v3/exchangeInfo?symbol=BTCUSDT."""
     return {

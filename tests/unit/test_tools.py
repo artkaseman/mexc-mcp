@@ -6,7 +6,7 @@ Uses respx to intercept httpx requests — no real network calls.
 import httpx
 import pytest
 
-from mexc_mcp.tools.account import get_balances
+from mexc_mcp.tools.account import get_balances, get_open_orders, get_trade_history
 from mexc_mcp.tools.market import get_exchange_info, get_klines, get_orderbook, get_ticker, ping_mexc
 
 
@@ -355,3 +355,178 @@ async def test_get_balances_missing_credentials(monkeypatch: pytest.MonkeyPatch)
 
     assert "error" in result
     assert "authentication" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# get_open_orders
+# ---------------------------------------------------------------------------
+
+
+async def test_get_open_orders_with_symbol(mexc_mock, auth_env, btcusdt_open_orders_raw):
+    mexc_mock.get("/api/v3/openOrders").mock(
+        return_value=httpx.Response(200, json=btcusdt_open_orders_raw)
+    )
+
+    result = await get_open_orders("BTCUSDT")
+
+    assert result["symbol"] == "BTCUSDT"
+    assert len(result["orders"]) == 1
+
+
+async def test_get_open_orders_without_symbol(mexc_mock, auth_env, btcusdt_open_orders_raw):
+    mexc_mock.get("/api/v3/openOrders").mock(
+        return_value=httpx.Response(200, json=btcusdt_open_orders_raw)
+    )
+
+    result = await get_open_orders()
+
+    assert result["symbol"] == "ALL"
+
+
+async def test_get_open_orders_uppercases_symbol(mexc_mock, auth_env, btcusdt_open_orders_raw):
+    route = mexc_mock.get("/api/v3/openOrders").mock(
+        return_value=httpx.Response(200, json=btcusdt_open_orders_raw)
+    )
+
+    await get_open_orders("btcusdt")
+
+    assert "BTCUSDT" in str(route.calls[0].request.url)
+
+
+async def test_get_open_orders_fields(mexc_mock, auth_env, btcusdt_open_orders_raw):
+    mexc_mock.get("/api/v3/openOrders").mock(
+        return_value=httpx.Response(200, json=btcusdt_open_orders_raw)
+    )
+
+    result = await get_open_orders("BTCUSDT")
+    order = result["orders"][0]
+
+    assert order["symbol"] == "BTCUSDT"
+    assert order["order_id"] == "C02__474250929059741696"
+    assert order["side"] == "BUY"
+    assert order["status"] == "NEW"
+    assert order["price"] == "50000.00"
+    assert isinstance(order["price"], str)  # Decimal serialised as str
+
+
+async def test_get_open_orders_sends_auth(mexc_mock, auth_env, btcusdt_open_orders_raw):
+    route = mexc_mock.get("/api/v3/openOrders").mock(
+        return_value=httpx.Response(200, json=btcusdt_open_orders_raw)
+    )
+
+    await get_open_orders("BTCUSDT")
+
+    url = str(route.calls[0].request.url)
+    assert "signature=" in url
+    assert route.calls[0].request.headers.get("x-mexc-apikey") == "test_api_key_1234"
+
+
+async def test_get_open_orders_empty_list(mexc_mock, auth_env):
+    mexc_mock.get("/api/v3/openOrders").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    result = await get_open_orders("BTCUSDT")
+
+    assert result["orders"] == []
+
+
+async def test_get_open_orders_api_error(mexc_mock, auth_env):
+    mexc_mock.get("/api/v3/openOrders").mock(
+        return_value=httpx.Response(400, json={"code": -1121, "msg": "Invalid symbol."})
+    )
+
+    result = await get_open_orders("FAKE")
+
+    assert "error" in result
+    assert result["code"] == -1121
+
+
+# ---------------------------------------------------------------------------
+# get_trade_history
+# ---------------------------------------------------------------------------
+
+
+async def test_get_trade_history_success(mexc_mock, auth_env, btcusdt_trade_history_raw):
+    mexc_mock.get("/api/v3/myTrades").mock(
+        return_value=httpx.Response(200, json=btcusdt_trade_history_raw)
+    )
+
+    result = await get_trade_history("BTCUSDT")
+
+    assert result["symbol"] == "BTCUSDT"
+    assert len(result["trades"]) == 2
+
+
+async def test_get_trade_history_fields(mexc_mock, auth_env, btcusdt_trade_history_raw):
+    mexc_mock.get("/api/v3/myTrades").mock(
+        return_value=httpx.Response(200, json=btcusdt_trade_history_raw)
+    )
+
+    result = await get_trade_history("BTCUSDT")
+    trade = result["trades"][0]
+
+    assert trade["id"] == "C02__474250929059741697"
+    assert trade["price"] == "70996.79"
+    assert trade["qty"] == "0.001"
+    assert trade["commission"] == "0.03549840"
+    assert trade["commission_asset"] == "USDT"
+    assert trade["is_buyer"] is True
+    assert trade["is_maker"] is False
+    assert isinstance(trade["price"], str)
+
+
+async def test_get_trade_history_passes_limit(mexc_mock, auth_env, btcusdt_trade_history_raw):
+    route = mexc_mock.get("/api/v3/myTrades").mock(
+        return_value=httpx.Response(200, json=btcusdt_trade_history_raw)
+    )
+
+    await get_trade_history("BTCUSDT", limit=10)
+
+    assert "limit=10" in str(route.calls[0].request.url)
+
+
+async def test_get_trade_history_passes_time_range(mexc_mock, auth_env, btcusdt_trade_history_raw):
+    route = mexc_mock.get("/api/v3/myTrades").mock(
+        return_value=httpx.Response(200, json=btcusdt_trade_history_raw)
+    )
+
+    await get_trade_history("BTCUSDT", start_time=1000000, end_time=2000000)
+
+    url = str(route.calls[0].request.url)
+    assert "startTime=1000000" in url
+    assert "endTime=2000000" in url
+
+
+async def test_get_trade_history_no_time_range_omits_params(mexc_mock, auth_env, btcusdt_trade_history_raw):
+    route = mexc_mock.get("/api/v3/myTrades").mock(
+        return_value=httpx.Response(200, json=btcusdt_trade_history_raw)
+    )
+
+    await get_trade_history("BTCUSDT")
+
+    url = str(route.calls[0].request.url)
+    assert "startTime" not in url
+    assert "endTime" not in url
+
+
+async def test_get_trade_history_sends_auth(mexc_mock, auth_env, btcusdt_trade_history_raw):
+    route = mexc_mock.get("/api/v3/myTrades").mock(
+        return_value=httpx.Response(200, json=btcusdt_trade_history_raw)
+    )
+
+    await get_trade_history("BTCUSDT")
+
+    url = str(route.calls[0].request.url)
+    assert "signature=" in url
+    assert route.calls[0].request.headers.get("x-mexc-apikey") == "test_api_key_1234"
+
+
+async def test_get_trade_history_api_error(mexc_mock, auth_env):
+    mexc_mock.get("/api/v3/myTrades").mock(
+        return_value=httpx.Response(400, json={"code": -1121, "msg": "Invalid symbol."})
+    )
+
+    result = await get_trade_history("FAKE")
+
+    assert "error" in result
